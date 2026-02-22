@@ -111,7 +111,7 @@ Title.Parent = TopBar
 Title.Size = UDim2.new(1, -40, 1, 0)
 Title.Position = UDim2.new(0, 10, 0, 0)
 Title.BackgroundTransparency = 1
-Title.Text = "Sync Hub [v8]"
+Title.Text = "Sync Hub [v10]"
 Title.TextColor3 = Color3.fromRGB(220, 220, 220)
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 14
@@ -162,13 +162,22 @@ ContentArea.Position = UDim2.new(0, 100, 0, 30)
 ContentArea.BackgroundTransparency = 1
 
 -- Container exclusivo pras abas (Para a ListLayout não bugar com os hiders decorativos)
-local TabContainer = Instance.new("Frame", Sidebar)
+local TabContainer = Instance.new("ScrollingFrame", Sidebar)
 TabContainer.Size = UDim2.new(1, 0, 1, 0)
 TabContainer.BackgroundTransparency = 1
+TabContainer.ScrollBarThickness = 2
+TabContainer.BorderSizePixel = 0
+TabContainer.CanvasSize = UDim2.new(0, 0, 0, 200)
 
 local SidebarList = Instance.new("UIListLayout", TabContainer)
 SidebarList.SortOrder = Enum.SortOrder.LayoutOrder
 SidebarList.Padding = UDim.new(0, 5)
+
+-- Expande o Scroll automaticamente
+SidebarList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+	TabContainer.CanvasSize = UDim2.new(0, 0, 0, SidebarList.AbsoluteContentSize.Y + 10)
+end)
+
 local SidebarPadding = Instance.new("UIPadding", TabContainer)
 SidebarPadding.PaddingTop = UDim.new(0, 5)
 
@@ -219,6 +228,7 @@ local function CreateTab(name)
 end
 
 local PlayerTab = CreateTab("Jogador")
+local VulnTab = CreateTab("Vulnerabilidades")
 local FarmTab = CreateTab("Farm/Loja")
 local MiscTab = CreateTab("Outros")
 
@@ -609,6 +619,13 @@ task.spawn(function()
 							handle.CanCollide = false -- Pra não bugar a física e jogar o personagem longe
 							handle.Massless = true -- Impede a gravidade do bastão gigante afetar o voo
 							handle.Transparency = 0.8 -- Deixa quase invisível pra não cegar o user
+							
+							-- Muitos Tacos de baseball e facas usam Meshes importados do Studio.
+							-- Os the SpecialMesh restringe visualmente, então ele bloqueia crescer a espada e ela parece inalterada!
+							local mesh = handle:FindFirstChildWhichIsA("DataModelMesh", true) or handle:FindFirstChildWhichIsA("SpecialMesh")
+							if mesh then
+								mesh.Scale = Vector3.new(30, 30, 30)
+							end
 							
 							-- Se for usando sistema de toque bruto nos inimigos, já ataca quem tiver dentro
 							for _, enemyChar in ipairs(workspace:GetChildren()) do
