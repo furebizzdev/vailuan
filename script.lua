@@ -481,21 +481,28 @@ end
 -- ABA FARM/LOJA (Auto Buy Brainrots)
 ---------------------------------------------------------------------
 
--- Para o Dropdown, desta vez vamos varrer o mapa (Workspace) atrás da fisicalidade dos itens,
--- pois usaremos CFrame para evitar a criptografia dos nomes/IDs.
+-- Para o Dropdown, nós varremos ReplicatedStorage e Workspace.
+-- Se mostrar "Aguardando itens do Mapa", é porque eles não spawnam no "Workspace.Brainrots".
 local brainrotList = {}
-local brainrotsModels = workspace:FindFirstChild("Brainrots") or workspace:FindFirstChild("Map") or workspace -- Ajuste a pasta se souber onde eles spawnar, coloquei como generalista
 pcall(function()
-	-- Procura coisas parecidas com o que foi loggado ou tenta achar ProximityPrompts
+	-- Tenta primeiro os Models que já estão soltos no mapa (Workspace)
 	if workspace:FindFirstChild("Brainrots") then
 		for _, item in ipairs(workspace.Brainrots:GetChildren()) do
-			if item:IsA("Model") or item:IsA("Part") then
+			table.insert(brainrotList, item.Name)
+		end
+	end
+	
+	-- Se não achou na pasta "Brainrots" do Workspace, puxa a lista pelos arquivos originais na Replicated
+	if #brainrotList == 0 then
+		local repStore = game:GetService("ReplicatedStorage")
+		if repStore:FindFirstChild("Brainrots") then
+			for _, item in ipairs(repStore.Brainrots:GetChildren()) do
 				table.insert(brainrotList, item.Name)
 			end
 		end
 	end
 end)
-if #brainrotList == 0 then brainrotList = {"Aguardando Itens do Mapa"} end -- Fallback
+if #brainrotList == 0 then brainrotList = {"ItemNaoEncontrado"} end -- Fallback
 
 local selectedItemToBuy = nil
 CreateDropdown(FarmTab, "Item (Brainrot)", brainrotList, function(selected)
@@ -514,11 +521,20 @@ table.insert(connections, RunService.RenderStepped:Connect(function()
 			local character = LocalPlayer.Character
 			if character and character:FindFirstChild("HumanoidRootPart") then
 				
-				-- Procura o item no Workspace
-				-- Geralmente os jogos guardam em uma pasta no workspace, tentei "Brainrots" ou o Workspace inteiro
+				-- Procura o item de forma GLOBAL no Workspace (seja na pasta Brainrots ou Map)
 				local targetItem = nil
-				if workspace:FindFirstChild("Brainrots") then
+				if workspace:FindFirstChild("Brainrots") and workspace.Brainrots:FindFirstChild(selectedItemToBuy) then
 					targetItem = workspace.Brainrots:FindFirstChild(selectedItemToBuy)
+				else
+					-- Procura de forma agressiva ignorando pasta. CUIDADO: Pode custar performance num mapa mt grande
+					for _, v in ipairs(workspace:GetDescendants()) do
+						if v.Name == selectedItemToBuy and (v:IsA("Model") or v:IsA("BasePart")) then
+							if v:FindFirstChildWhichIsA("ProximityPrompt", true) or v:IsA("Part") then
+								targetItem = v
+								break
+							end
+						end
+					end
 				end
 				
 				if targetItem then
