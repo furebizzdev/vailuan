@@ -481,8 +481,9 @@ end
 -- ABA FARM/LOJA (Auto Buy Brainrots)
 ---------------------------------------------------------------------
 
--- Para o Dropdown, nós poderíamos varrer ReplicatedStorage.Brainrots se quiséssemos dinâmico,
--- mas como o exploit tá sendo feito base, vamos simular ou varrer (se o exploit suportar rs)
+-- Para o Dropdown, nós varremos ReplicatedStorage.Brainrots pra pegar o Nome de CADA UM 
+-- Observação pelo seu log (Argumento 4): Parece que os itens pedem o NOME ou o ID deles. 
+-- Vamos usar o Nome do item como selecionado, que geralmente é o nome da Pasta/Instância.
 local brainrotList = {}
 pcall(function()
 	local repStore = game:GetService("ReplicatedStorage")
@@ -492,7 +493,7 @@ pcall(function()
 		end
 	end
 end)
-if #brainrotList == 0 then brainrotList = {"Item 1", "Item 2", "Item 3"} end -- Fallback se a pasta n carregar logo de cara
+if #brainrotList == 0 then brainrotList = {"ItemNaoCarregado"} end -- Fallback
 
 local selectedItemToBuy = nil
 CreateDropdown(FarmTab, "Item (Brainrot)", brainrotList, function(selected)
@@ -505,7 +506,7 @@ CreateToggle(FarmTab, "Auto Comprar Brainrot", function(state)
 end)
 
 -- Loop de Compra (Ajuste o caminho do Remote, baseado no Bridge)
-table.insert(connections, RunService.RenderStepped:Connect(function() -- Pode ser alterado para task.spawn + wait se travar o jogo
+table.insert(connections, RunService.RenderStepped:Connect(function() 
 	if autoBuyActive and selectedItemToBuy then
 		pcall(function()
 			local remotes = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
@@ -513,12 +514,15 @@ table.insert(connections, RunService.RenderStepped:Connect(function() -- Pode se
 				local bridge = remotes:FindFirstChild("Bridge")
 				if bridge then
 					if bridge:IsA("RemoteEvent") then
-						-- Alguns remotes genéricos como "Bridge" ou "Network" pedem a AÇÃO como primeiro argumento
-						-- Exemplo: Bridge:FireServer("Buy", selectedItemToBuy)
-						-- Vamos disparar o item direto para testar:
-						bridge:FireServer(selectedItemToBuy)
-					elseif bridge:IsA("RemoteFunction") then
-						bridge:InvokeServer(selectedItemToBuy)
+						-- Usando os Argumentos exatos capturados pelo Spy:
+                        -- [1] = "Path", [2] = "Brainrots", [3] = "Purchase", [4] = Item/UUID
+						local args = {
+							[1] = "Path",
+							[2] = "Brainrots",
+							[3] = "Purchase",
+							[4] = selectedItemToBuy -- O nome/id vindo do Dropdown
+						}
+						bridge:FireServer(unpack(args))
 					end
 				end
 			end
