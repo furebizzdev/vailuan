@@ -111,7 +111,7 @@ Title.Parent = TopBar
 Title.Size = UDim2.new(1, -40, 1, 0)
 Title.Position = UDim2.new(0, 10, 0, 0)
 Title.BackgroundTransparency = 1
-Title.Text = "Sync Hub [v5]"
+Title.Text = "Sync Hub [v8]"
 Title.TextColor3 = Color3.fromRGB(220, 220, 220)
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 14
@@ -487,32 +487,191 @@ local function CreateDropdown(parent, title, options, callback)
 	for _, opt in ipairs(options) do AddOption(opt) end
 end
 
----------------------------------------------------------------------
--- ABA FARM/LOJA (Auto Buy Brainrots)
----------------------------------------------------------------------
+-- Abas
+local PlayerTab = CreateTab("Jogador")
+local VulnTab = CreateTab("Vulnerabilidades")
+local FarmTab = CreateTab("Farm/Loja")
+local MiscTab = CreateTab("Outros")
 
--- Para o Dropdown, nós varremos ReplicatedStorage e Workspace.
--- Se mostrar "Aguardando itens do Mapa", é porque eles não spawnam no "Workspace.Brainrots".
-local brainrotList = {}
-pcall(function()
-	-- Tenta primeiro os Models que já estão soltos no mapa (Workspace)
-	if workspace:FindFirstChild("Brainrots") then
-		for _, item in ipairs(workspace.Brainrots:GetChildren()) do
-			table.insert(brainrotList, item.Name)
-		end
-	end
+-- Garante que a primeira aba esteja visível ao iniciar
+Tabs["Jogador"].Content.Visible = true
+Tabs["Jogador"].Button.TextColor3 = Color3.fromRGB(255, 255, 255)
+
+---------------------------------------------------------------------
+-- ABA VULNERABILIDADES (Dinheiro e Exploits Universais)
+---------------------------------------------------------------------
+local autoMoneyActive = false
+CreateToggle(VulnTab, "Farmar Dinheiro (Remotes Abertos)", function(state)
+	autoMoneyActive = state
+end)
+
+local infJumpActive = false
+CreateToggle(VulnTab, "Pulo Infinito (Pressione Barra)", function(state)
+	infJumpActive = state
+end)
+
+local noclipActive = false
+CreateToggle(VulnTab, "Noclip (Fantasma)", function(state)
+	noclipActive = state
+end)
+
+local batAuraActive = false
+CreateToggle(VulnTab, "Bat Aura (Max Hitbox + Rapid Fire)", function(state)
+	batAuraActive = state
 	
-	-- Se não achou na pasta "Brainrots" do Workspace, puxa a lista pelos arquivos originais na Replicated
-	if #brainrotList == 0 then
-		local repStore = game:GetService("ReplicatedStorage")
-		if repStore:FindFirstChild("Brainrots") then
-			for _, item in ipairs(repStore.Brainrots:GetChildren()) do
-				table.insert(brainrotList, item.Name)
+	-- Se o cara desligar, tenta restaurar o tamanho do taco (aproximado)
+	if not state then
+		pcall(function()
+			local character = LocalPlayer.Character
+			if character then
+				local tool = character:FindFirstChildWhichIsA("Tool")
+				if tool and tool:FindFirstChild("Handle") then
+					tool.Handle.Size = Vector3.new(1, 4, 1) -- Tamanho normal aproximado de um bastão
+					tool.Handle.Massless = false
+					tool.Handle.Transparency = 0
+				end
 			end
+		end)
+	end
+end)
+
+-- Loop Auto Dinheiro: Tenta explorar remotes que dão grana se o dev não proteger
+task.spawn(function()
+	while task.wait(0.2) do
+		if autoMoneyActive then
+			pcall(function()
+				local rep = game:GetService("ReplicatedStorage")
+				
+				-- Nomes de remotes de dinheiro muito clichês/comuns em jogos de novatos
+				local exploitNames = {
+					"AddMoney", "GiveMoney", "AddCash", "GiveCash", 
+					"Deposit", "EarnCash", "GetMoney", "RequestMoney"
+				}
+				
+				for _, name in ipairs(exploitNames) do
+					-- Tenta achar direto na Replicated ou dentro de pastas como "Remotes" / "Events"
+					local targetEvent = rep:FindFirstChild(name, true)
+					
+					if targetEvent and targetEvent:IsA("RemoteEvent") then
+						-- Dispara pedindo valores absurdos do lado do cliente
+						targetEvent:FireServer(math.random(5000, 10000))
+					elseif targetEvent and targetEvent:IsA("RemoteFunction") then
+						targetEvent:InvokeServer(math.random(5000, 10000))
+					end
+				end
+			end)
 		end
 	end
 end)
-if #brainrotList == 0 then brainrotList = {"ItemNaoEncontrado"} end -- Fallback
+
+-- Conexão pro loop de pulo
+table.insert(connections, UserInputService.JumpRequest:Connect(function()
+	if infJumpActive then
+		pcall(function()
+			local character = LocalPlayer.Character
+			if character and character:FindFirstChild("Humanoid") then
+				character.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+			end
+		end)
+	end
+end))
+
+-- Conexão loop de noclip (atravessar porta/mapa)
+table.insert(connections, RunService.Stepped:Connect(function()
+	if noclipActive then
+		pcall(function()
+			local character = LocalPlayer.Character
+			if character then
+				for _, part in ipairs(character:GetDescendants()) do
+					if part:IsA("BasePart") and part.CanCollide then
+						part.CanCollide = false
+					end
+				end
+			end
+		end)
+	end
+end))
+
+-- Loop do Bat Aura (Kill Aura com Taco e Hitbox enorme)
+task.spawn(function()
+	while task.wait(0.05) do -- Speed muito rápido pra bater (20 clicks por segundo)
+		if batAuraActive then
+			pcall(function()
+				local character = LocalPlayer.Character
+				if character then
+					-- Pega a ferramenta (taco/espada) que o personagem está segurando no momento
+					local tool = character:FindFirstChildWhichIsA("Tool")
+					if tool then
+						-- Aumenta a Hitbox absurdamente
+						local handle = tool:FindFirstChild("Handle")
+						if handle and handle:IsA("BasePart") then
+							handle.Size = Vector3.new(30, 30, 30) -- Caixona gigante
+							handle.CanCollide = false -- Pra não bugar a física e jogar o personagem longe
+							handle.Massless = true -- Impede a gravidade do bastão gigante afetar o voo
+							handle.Transparency = 0.8 -- Deixa quase invisível pra não cegar o user
+							
+							-- Se for usando sistema de toque bruto nos inimigos, já ataca quem tiver dentro
+							for _, enemyChar in ipairs(workspace:GetChildren()) do
+								if enemyChar ~= character and enemyChar:FindFirstChild("Humanoid") and enemyChar:FindFirstChild("HumanoidRootPart") then
+									local distance = (character.HumanoidRootPart.Position - enemyChar.HumanoidRootPart.Position).Magnitude
+									if distance <= 35 then -- O alvo tá na range da Hitbox expandida?
+										-- Força toque no Handle contra eles dependendo do anticheat
+										if handle:FindFirstChildWhichIsA("TouchTransmitter") then
+											firetouchinterest(handle, enemyChar.HumanoidRootPart, 0)
+											firetouchinterest(handle, enemyChar.HumanoidRootPart, 1)
+										end
+									end
+								end
+							end
+						end
+						
+						-- Simula Cliques loucamente (Attack Rápido)
+						tool:Activate()
+					end
+				end
+			end)
+		end
+	end
+end)
+
+---------------------------------------------------------------------
+-- ABA FARM/LOJA (Auto Buy Brainrots)
+
+-- Aba Farm: Mapeamento de Itens Criptografados
+local brainrotList = {}
+local brainrotMapping = {} -- Guarda a relação { ["Nome Visual"] = "IDCriptografado" }
+
+pcall(function()
+	local repStore = game:GetService("ReplicatedStorage")
+	if repStore:FindFirstChild("Brainrots") then
+		for _, item in ipairs(repStore.Brainrots:GetChildren()) do
+			-- Se o nome da pasta for o ID "14-98fc-...", tentamos achar o NOME VERDADEIRO 
+			-- guardado dentro de algum StringValue ou do prompt
+			local visualName = "Desconhecido"
+			
+			-- Tenta ler atributos ou valores dentro do item
+			local prompt = item:FindFirstChildWhichIsA("ProximityPrompt", true)
+			if prompt and prompt.ObjectText ~= "" then
+				visualName = prompt.ObjectText
+			elseif item:GetAttribute("Name") then
+				visualName = tostring(item:GetAttribute("Name"))
+			elseif item:FindFirstChild("Name") and item.Name:IsA("StringValue") then
+				visualName = item.Name.Value
+			else
+				-- Se não der pra desvendar, a gente lista o próprio código bruto que o Spy pegou
+				visualName = item.Name 
+			end
+			
+			-- Evita duplicatas com mesmo nome na lista
+			if not table.find(brainrotList, visualName) then
+				table.insert(brainrotList, visualName)
+			end
+			brainrotMapping[visualName] = item.Name -- O Item.Name = O maldito código UUID pra mandar pro server
+		end
+	end
+end)
+
+if #brainrotList == 0 then brainrotList = {"ItemNaoEncontrado"} end
 
 local selectedItemToBuy = nil
 CreateDropdown(FarmTab, "Item (Brainrot)", brainrotList, function(selected)
@@ -546,96 +705,28 @@ local function Notify(title, text)
 	end)
 end
 
--- Loop de Auto Farm (Fly Absoluto Anchored Direcionado a Objetos Criptografados)
-local flying = false
+-- Loop de Auto Farm (VIA REMOTE DEFINITIVO: Sync Hub [v6])
+local purchaseDelay = 0.5 
 task.spawn(function()
-	while task.wait(0.5) do
-		if autoBuyActive and selectedItemToBuy and not flying then
+	while task.wait(purchaseDelay) do
+		if autoBuyActive and selectedItemToBuy then
 			pcall(function()
-				local character = LocalPlayer.Character
-				if character and character:FindFirstChild("HumanoidRootPart") and character:FindFirstChild("Humanoid") then
-					
-					local rootPart = character.HumanoidRootPart
-					
-					-- Já que os nomes no mapa são criptografados (ex: "82jf-28jf..."), não podemos buscar por v.Name == selectedItemToBuy.
-					-- A tática agora é: Procurar pelos Textos Escritos nos "ProximityPrompts" (os botões E de comprar).
-					-- O texto que aparece na tela do jogador raramente é criptografado!
-					local targetItem = nil
-					local targetPrompt = nil
-					
-					for _, prompt in ipairs(workspace:GetDescendants()) do
-						if prompt:IsA("ProximityPrompt") then
-							-- Verifica se o nome do item que queremos está escrito no objeto do prompt ou na ação dele
-							if string.find(string.lower(prompt.ObjectText), string.lower(selectedItemToBuy)) or 
-							   string.find(string.lower(prompt.ActionText), string.lower(selectedItemToBuy)) then
-								targetPrompt = prompt
-								targetItem = prompt.Parent -- O Part que segura o botão
-								break
-							end
-						end
-					end
-					
-					-- Se o script não achar pelo texto do Prompt, ele vai tentar achar um modelo criptografado
-					-- que pelo menos tenha um Humanoid/Item físico e vai pegar o primeiro da pasta que for interativo
-					if not targetItem and workspace:FindFirstChild("Brainrots") then
-						for _, v in ipairs(workspace.Brainrots:GetDescendants()) do
-							if v:IsA("BasePart") and v:FindFirstChildWhichIsA("ProximityPrompt") then
-								targetItem = v
-								targetPrompt = v:FindFirstChildWhichIsA("ProximityPrompt")
-								break
-							end
-						end
-					end
-					
-					if targetItem and targetItem:IsA("BasePart") then
-						flying = true
+				local remotes = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
+				
+				if remotes then
+					local bridge = remotes:FindFirstChild("Bridge")
+					if bridge and bridge:IsA("RemoteEvent") then
+						-- Captura o ID Criptografado real com base no selecionado da lista do Dropdown
+						local realUUID = brainrotMapping[selectedItemToBuy] or selectedItemToBuy
 						
-						-- Força as mudanças para ignorar colisão e física externa (Fly Blindado CFrame)
-						local oldAnchored = rootPart.Anchored
-						rootPart.Anchored = true
+						local args = {
+							[1] = "Path",
+							[2] = "Brainrots",
+							[3] = "Purchase",
+							[4] = realUUID -- Manda EXATAMENTE o que o Spy registrou
+						}
 						
-						local noclipConnection = RunService.Stepped:Connect(function()
-							for _, part in ipairs(character:GetDescendants()) do
-								if part:IsA("BasePart") then part.CanCollide = false end
-							end
-						end)
-						
-						-- Anima o voo manualmente em direção a peça criptografada
-						local speed = 2.5
-						while targetItem and targetItem.Parent and autoBuyActive do
-							local dist = (rootPart.Position - targetItem.Position).Magnitude
-							
-							if dist < 5 then
-								rootPart.CFrame = targetItem.CFrame
-								break
-							end
-							
-							local lookCFrame = CFrame.lookAt(rootPart.Position, targetItem.Position)
-							rootPart.CFrame = lookCFrame * CFrame.new(0, 0, -speed)
-							
-							task.wait()
-						end
-						
-						-- Restaura a física
-						noclipConnection:Disconnect()
-						rootPart.Anchored = oldAnchored
-						rootPart.Velocity = Vector3.new(0,0,0)
-						
-						-- Interage focadamente no Prompt achado
-						if targetPrompt then
-							fireproximityprompt(targetPrompt, 1, true)
-						end
-						if targetItem:FindFirstChildWhichIsA("TouchTransmitter") then
-							firetouchinterest(rootPart, targetItem, 0)
-							task.wait(0.1)
-							firetouchinterest(rootPart, targetItem, 1)
-						end
-						
-						task.wait(0.5)
-						flying = false
-					else
-						Notify("Sync Hub", "Nenhuma interação ou Prompt achado para esse item!")
-						task.wait(3)
+						bridge:FireServer(unpack(args))
 					end
 				end
 			end)
