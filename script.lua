@@ -101,7 +101,12 @@ Title.Parent = TopBar
 Title.Size = UDim2.new(1, -40, 1, 0)
 Title.Position = UDim2.new(0, 10, 0, 0)
 Title.BackgroundTransparency = 1
-Title.Text = "Sync Hub [v2]"
+local Title = Instance.new("TextLabel")
+Title.Parent = TopBar
+Title.Size = UDim2.new(1, -40, 1, 0)
+Title.Position = UDim2.new(0, 10, 0, 0)
+Title.BackgroundTransparency = 1
+Title.Text = "Sync Hub [v3]"
 Title.TextColor3 = Color3.fromRGB(220, 220, 220)
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 14
@@ -514,11 +519,22 @@ CreateToggle(FarmTab, "Auto Comprar Brainrot", function(state)
 	autoBuyActive = state
 end)
 
--- Loop de Auto Farm (Pseudo-Fly Manual Lerp)
--- Usando movimentação manual CFrame contínua pra forçar a ida (passa por cima de anticheats que barram body movers)
+-- Função auxiliar para notificar na tela do Roblox
+local function Notify(title, text)
+	pcall(function()
+		game.StarterGui:SetCore("SendNotification", {
+			Title = title,
+			Text = text,
+			Duration = 3
+		})
+	end)
+end
+
+-- Loop de Auto Farm (Fly Absoluto Anchored + Lerp/Tween)
+-- O modo definitivo para forçar voo em anticheats: "Ancorar" (congelar) o osso do boneco e deslocar a estátua pelo ar.
 local flying = false
 task.spawn(function()
-	while task.wait() do
+	while task.wait(0.5) do
 		if autoBuyActive and selectedItemToBuy and not flying then
 			pcall(function()
 				local character = LocalPlayer.Character
@@ -533,6 +549,7 @@ task.spawn(function()
 					else
 						for _, v in ipairs(workspace:GetDescendants()) do
 							if v.Name == selectedItemToBuy and (v:IsA("Model") or v:IsA("BasePart")) then
+								-- Verifica se tem ProximityPrompt ou ao menos um Touch
 								if v:FindFirstChildWhichIsA("ProximityPrompt", true) or v:IsA("Part") then
 									targetItem = v
 									break
@@ -547,40 +564,38 @@ task.spawn(function()
 						if targetPart then
 							flying = true
 							
-							-- Desativa noclip dinâmico para não travar nas paredes
-							local noclipConnection
-							noclipConnection = RunService.Stepped:Connect(function()
+							-- Força as mudanças para ignorar colisão e física externa
+							local oldAnchored = rootPart.Anchored
+							rootPart.Anchored = true
+							
+							local noclipConnection = RunService.Stepped:Connect(function()
 								for _, part in ipairs(character:GetDescendants()) do
-									if part:IsA("BasePart") then
-										part.CanCollide = false
-									end
+									if part:IsA("BasePart") then part.CanCollide = false end
 								end
-								-- Congela a física para o Humanoid não puxar pra baixo
-								rootPart.Velocity = Vector3.new(0,0,0)
 							end)
 							
-							-- Voa manualmente CFrame por CFrame até o alvo
-							local speed = 3.5 -- Velocidade que ele avança a cada pulso
+							-- Anima o voo manualmente (Lerp Anchored)
+							local speed = 2 -- Quanto maior, mais rápido o voo absoluto
 							while targetPart and targetPart.Parent and autoBuyActive do
 								local dist = (rootPart.Position - targetPart.Position).Magnitude
 								
-								-- Se já chegou ou tá muito perto, encerra o voo
-								if dist < 4 then
+								if dist < 5 then
 									rootPart.CFrame = targetPart.CFrame
 									break
 								end
 								
-								-- Aponta para o alvo e anda um pouco para frente
 								local lookCFrame = CFrame.lookAt(rootPart.Position, targetPart.Position)
 								rootPart.CFrame = lookCFrame * CFrame.new(0, 0, -speed)
 								
 								task.wait()
 							end
 							
+							-- Restaura a física e Noclip
 							noclipConnection:Disconnect()
+							rootPart.Anchored = oldAnchored
 							rootPart.Velocity = Vector3.new(0,0,0)
 							
-							-- TENTA INTERAGIR UMA VEZ QUE CHEGOU NO ALVO
+							-- INTERAÇÃO
 							if targetItem and targetItem.Parent then
 								for _, prompt in ipairs(targetItem:GetDescendants()) do
 									if prompt:IsA("ProximityPrompt") then
@@ -597,7 +612,14 @@ task.spawn(function()
 							
 							task.wait(0.5)
 							flying = false
+						else
+							Notify("Sync Hub", "Parte física do item não achada!")
+							task.wait(3)
 						end
+					else
+						-- Avisa o usuário se o item estragou ou ainda não spawnou
+						Notify("Sync Hub", "Item não encontrado no Mapa!")
+						task.wait(3) -- Espera uns segundos antes de "spamar" aviso
 					end
 				end
 			end)
