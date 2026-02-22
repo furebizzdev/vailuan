@@ -20,6 +20,7 @@ if not success then HubGui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
 local connections = {}
 local speedValue = 16
 local speedBoostActive = false
+local antiRagdollActive = false
 
 ---------------------------------------------------------------------
 -- BOTÃO FLUTUANTE (Para abrir/fechar o Menu)
@@ -342,10 +343,42 @@ CreateToggle(PlayerTab, "Ativar Boost de Velocidade", function(state)
 	end
 end)
 
--- Loop para forçar a velocidade caso o jogo tente resetar (comum em roblox)
+-- Adicionando Toggle de Anti Ragdoll
+CreateToggle(PlayerTab, "Anti Ragdoll", function(state)
+	antiRagdollActive = state
+	if not state and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+		LocalPlayer.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
+	end
+end)
+
+-- Loop para forçar estados e atributos (Velocidade e Anti Ragdoll)
 table.insert(connections, RunService.RenderStepped:Connect(function()
-	if speedBoostActive and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-		LocalPlayer.Character.Humanoid.WalkSpeed = speedValue
+	if LocalPlayer.Character then
+		local humanoid = LocalPlayer.Character:FindFirstChild("Humanoid")
+		
+		if speedBoostActive and humanoid then
+			humanoid.WalkSpeed = speedValue
+		end
+
+		if antiRagdollActive and humanoid then
+			pcall(function()
+				-- Bloqueia o Estado e força a levantar
+				humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+				if humanoid:GetState() == Enum.HumanoidStateType.Ragdoll or humanoid:GetState() == Enum.HumanoidStateType.FallingDown then
+					humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+				end
+				
+				-- Combate o script ragdoll_controller bloqueando a desativação da Root do LowerTorso
+				local lowerTorso = LocalPlayer.Character:FindFirstChild("LowerTorso")
+				if lowerTorso then
+					local root = lowerTorso:FindFirstChild("Root")
+					if root and root.Enabled == false then
+						root.Enabled = true
+						workspace.CurrentCamera.CameraSubject = humanoid
+					end
+				end
+			end)
+		end
 	end
 end))
 
@@ -360,9 +393,10 @@ end))
 
 -- Botão X de Fechamento (Encerramento do Script)
 table.insert(connections, CloseButton.MouseButton1Click:Connect(function()
-	-- Desativa a velocidade primeiro
+	-- Desativa a velocidade e restaura a física do ragdoll primeiro
 	if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
 		LocalPlayer.Character.Humanoid.WalkSpeed = 16
+		LocalPlayer.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
 	end
 	
 	-- Desconecta todos os loops e eventos para não sobrar rastros (memory leak)
