@@ -151,17 +151,22 @@ ContentArea.Size = UDim2.new(1, -100, 1, -30)
 ContentArea.Position = UDim2.new(0, 100, 0, 30)
 ContentArea.BackgroundTransparency = 1
 
-local SidebarList = Instance.new("UIListLayout", Sidebar)
+-- Container exclusivo pras abas (Para a ListLayout não bugar com os hiders decorativos)
+local TabContainer = Instance.new("Frame", Sidebar)
+TabContainer.Size = UDim2.new(1, 0, 1, 0)
+TabContainer.BackgroundTransparency = 1
+
+local SidebarList = Instance.new("UIListLayout", TabContainer)
 SidebarList.SortOrder = Enum.SortOrder.LayoutOrder
 SidebarList.Padding = UDim.new(0, 5)
-local SidebarPadding = Instance.new("UIPadding", Sidebar)
+local SidebarPadding = Instance.new("UIPadding", TabContainer)
 SidebarPadding.PaddingTop = UDim.new(0, 5)
 
 -- Gerenciador de Categorias
 local Tabs = {}
 local function CreateTab(name)
 	local TabButton = Instance.new("TextButton")
-	TabButton.Parent = Sidebar
+	TabButton.Parent = TabContainer
 	TabButton.Size = UDim2.new(1, 0, 0, 30)
 	TabButton.BackgroundTransparency = 1
 	TabButton.Text = name
