@@ -111,7 +111,7 @@ Title.Parent = TopBar
 Title.Size = UDim2.new(1, -40, 1, 0)
 Title.Position = UDim2.new(0, 10, 0, 0)
 Title.BackgroundTransparency = 1
-Title.Text = "Sync Hub [v4]"
+Title.Text = "Sync Hub [v5]"
 Title.TextColor3 = Color3.fromRGB(220, 220, 220)
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 14
@@ -546,29 +546,96 @@ local function Notify(title, text)
 	end)
 end
 
--- Loop de Auto Farm (Via Remote "Bridge")
--- Como "Item não encontrado no Mapa" provou que o item NÃO É um objeto físico no chão, vamos voltar a bombardear o Remote!
-local purchaseDelay = 0.5 -- Tempo entre cada tentativa de compra (para não tomar kick de spam)
+-- Loop de Auto Farm (Fly Absoluto Anchored Direcionado a Objetos Criptografados)
+local flying = false
 task.spawn(function()
-	while task.wait(purchaseDelay) do
-		if autoBuyActive and selectedItemToBuy then
+	while task.wait(0.5) do
+		if autoBuyActive and selectedItemToBuy and not flying then
 			pcall(function()
-				local remotes = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
-				
-				if remotes then
-					local bridge = remotes:FindFirstChild("Bridge")
-					if bridge and bridge:IsA("RemoteEvent") then
-						-- Usando a estrutura de argumentos que o Spy pegou
-						-- [1] = "Path", [2] = "Brainrots", [3] = "Purchase", [4] = NOME DO ITEM (que pegamos do ReplicatedStorage)
-						local args = {
-							[1] = "Path",
-							[2] = "Brainrots",
-							[3] = "Purchase",
-							[4] = selectedItemToBuy 
-						}
+				local character = LocalPlayer.Character
+				if character and character:FindFirstChild("HumanoidRootPart") and character:FindFirstChild("Humanoid") then
+					
+					local rootPart = character.HumanoidRootPart
+					
+					-- Já que os nomes no mapa são criptografados (ex: "82jf-28jf..."), não podemos buscar por v.Name == selectedItemToBuy.
+					-- A tática agora é: Procurar pelos Textos Escritos nos "ProximityPrompts" (os botões E de comprar).
+					-- O texto que aparece na tela do jogador raramente é criptografado!
+					local targetItem = nil
+					local targetPrompt = nil
+					
+					for _, prompt in ipairs(workspace:GetDescendants()) do
+						if prompt:IsA("ProximityPrompt") then
+							-- Verifica se o nome do item que queremos está escrito no objeto do prompt ou na ação dele
+							if string.find(string.lower(prompt.ObjectText), string.lower(selectedItemToBuy)) or 
+							   string.find(string.lower(prompt.ActionText), string.lower(selectedItemToBuy)) then
+								targetPrompt = prompt
+								targetItem = prompt.Parent -- O Part que segura o botão
+								break
+							end
+						end
+					end
+					
+					-- Se o script não achar pelo texto do Prompt, ele vai tentar achar um modelo criptografado
+					-- que pelo menos tenha um Humanoid/Item físico e vai pegar o primeiro da pasta que for interativo
+					if not targetItem and workspace:FindFirstChild("Brainrots") then
+						for _, v in ipairs(workspace.Brainrots:GetDescendants()) do
+							if v:IsA("BasePart") and v:FindFirstChildWhichIsA("ProximityPrompt") then
+								targetItem = v
+								targetPrompt = v:FindFirstChildWhichIsA("ProximityPrompt")
+								break
+							end
+						end
+					end
+					
+					if targetItem and targetItem:IsA("BasePart") then
+						flying = true
 						
-						-- Dispara a compra!
-						bridge:FireServer(unpack(args))
+						-- Força as mudanças para ignorar colisão e física externa (Fly Blindado CFrame)
+						local oldAnchored = rootPart.Anchored
+						rootPart.Anchored = true
+						
+						local noclipConnection = RunService.Stepped:Connect(function()
+							for _, part in ipairs(character:GetDescendants()) do
+								if part:IsA("BasePart") then part.CanCollide = false end
+							end
+						end)
+						
+						-- Anima o voo manualmente em direção a peça criptografada
+						local speed = 2.5
+						while targetItem and targetItem.Parent and autoBuyActive do
+							local dist = (rootPart.Position - targetItem.Position).Magnitude
+							
+							if dist < 5 then
+								rootPart.CFrame = targetItem.CFrame
+								break
+							end
+							
+							local lookCFrame = CFrame.lookAt(rootPart.Position, targetItem.Position)
+							rootPart.CFrame = lookCFrame * CFrame.new(0, 0, -speed)
+							
+							task.wait()
+						end
+						
+						-- Restaura a física
+						noclipConnection:Disconnect()
+						rootPart.Anchored = oldAnchored
+						rootPart.Velocity = Vector3.new(0,0,0)
+						
+						-- Interage focadamente no Prompt achado
+						if targetPrompt then
+							fireproximityprompt(targetPrompt, 1, true)
+						end
+						if targetItem:FindFirstChildWhichIsA("TouchTransmitter") then
+							firetouchinterest(rootPart, targetItem, 0)
+							task.wait(0.1)
+							firetouchinterest(rootPart, targetItem, 1)
+						end
+						
+						task.wait(0.5)
+						flying = false
+					else
+						Notify("Sync Hub", "Nenhuma interação ou Prompt achado para esse item!")
+						task.wait(3)
 					end
 				end
 			end)
