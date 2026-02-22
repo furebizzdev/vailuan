@@ -514,52 +514,62 @@ CreateToggle(FarmTab, "Auto Comprar Brainrot", function(state)
 	autoBuyActive = state
 end)
 
--- Loop de Auto Farm (CFrame Teleport)
-table.insert(connections, RunService.RenderStepped:Connect(function() 
-	if autoBuyActive and selectedItemToBuy then
-		pcall(function()
-			local character = LocalPlayer.Character
-			if character and character:FindFirstChild("HumanoidRootPart") then
-				
-				-- Procura o item de forma GLOBAL no Workspace (seja na pasta Brainrots ou Map)
-				local targetItem = nil
-				if workspace:FindFirstChild("Brainrots") and workspace.Brainrots:FindFirstChild(selectedItemToBuy) then
-					targetItem = workspace.Brainrots:FindFirstChild(selectedItemToBuy)
-				else
-					-- Procura de forma agressiva ignorando pasta. CUIDADO: Pode custar performance num mapa mt grande
-					for _, v in ipairs(workspace:GetDescendants()) do
-						if v.Name == selectedItemToBuy and (v:IsA("Model") or v:IsA("BasePart")) then
-							if v:FindFirstChildWhichIsA("ProximityPrompt", true) or v:IsA("Part") then
-								targetItem = v
-								break
-							end
-						end
-					end
-				end
-				
-				if targetItem then
-					-- Encontra a parte principal do item (Part ou PrimaryPart de um Model)
-					local targetPart = targetItem:IsA("Model") and targetItem.PrimaryPart or targetItem:IsA("BasePart") and targetItem or targetItem:FindFirstChildWhichIsA("BasePart")
+-- Loop de Auto Farm (CFrame Teleport Asíncrono)
+-- Movido de RenderStepped para task.spawn + while wait para não bugar a física do Humanoid e seguir o item fluidamente
+task.spawn(function()
+	while task.wait(0.1) do
+		if autoBuyActive and selectedItemToBuy then
+			pcall(function()
+				local character = LocalPlayer.Character
+				if character and character:FindFirstChild("HumanoidRootPart") then
 					
-					if targetPart then
-						-- Teleporta o jogador até o item
-						character.HumanoidRootPart.CFrame = targetPart.CFrame * CFrame.new(0, 0, 0)
+					-- Procura o item de forma GLOBAL no Workspace (seja na pasta Brainrots ou Map)
+					local targetItem = nil
+					if workspace:FindFirstChild("Brainrots") and workspace.Brainrots:FindFirstChild(selectedItemToBuy) then
+						targetItem = workspace.Brainrots:FindFirstChild(selectedItemToBuy)
+					else
+						-- Procura de forma agressiva ignorando pasta
+						for _, v in ipairs(workspace:GetDescendants()) do
+							if v.Name == selectedItemToBuy and (v:IsA("Model") or v:IsA("BasePart")) then
+								if v:FindFirstChildWhichIsA("ProximityPrompt", true) or v:IsA("Part") then
+									targetItem = v
+									break
+								end
+							end
+						end
+					end
+					
+					if targetItem then
+						-- Encontra a parte principal do item (Part ou PrimaryPart de um Model)
+						local targetPart = targetItem:IsA("Model") and targetItem.PrimaryPart or targetItem:IsA("BasePart") and targetItem or targetItem:FindFirstChildWhichIsA("BasePart")
 						
-						-- Força a velocidade a zerar pro boneco não sair voando com física bugada no tp
-						character.HumanoidRootPart.Velocity = Vector3.new(0,0,0)
+						if targetPart then
+							-- Teleporta o jogador até o item
+							character.HumanoidRootPart.CFrame = targetPart.CFrame
+							
+							-- Força a velocidade a zerar pro boneco não sair voando com física bugada no tp
+							character.HumanoidRootPart.Velocity = Vector3.new(0,0,0)
 
-						-- Tenta Ativar todos os ProximityPrompts perto pra "comprar/pegar" automaticamente
-						for _, prompt in ipairs(targetItem:GetDescendants()) do
-							if prompt:IsA("ProximityPrompt") then
-								fireproximityprompt(prompt, 1, true)
+							-- Tenta Ativar todos os ProximityPrompts perto pra "comprar/pegar" automaticamente
+							for _, prompt in ipairs(targetItem:GetDescendants()) do
+								if prompt:IsA("ProximityPrompt") then
+									fireproximityprompt(prompt, 1, true)
+								end
+							end
+							
+							-- Interage encostando forçadamente (Fake Touch)
+							if targetPart:FindFirstChildWhichIsA("TouchTransmitter") then
+								firetouchinterest(character.HumanoidRootPart, targetPart, 0)
+								task.wait()
+								firetouchinterest(character.HumanoidRootPart, targetPart, 1)
 							end
 						end
 					end
 				end
-			end
-		end)
+			end)
+		end
 	end
-end))
+end)
 
 ---------------------------------------------------------------------
 -- BOTÕES DE CONTROLE GERAIS
