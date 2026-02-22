@@ -123,17 +123,22 @@ CloseButton.TextSize = 16
 ---------------------------------------------------------------------
 local Sidebar = Instance.new("Frame")
 Sidebar.Parent = MainFrame
-Sidebar.Size = UDim2.new(0, 100, 1, -30)
+Sidebar.Size = UDim2.new(0, 100, 1, -30) -- Ocupa altura inteira menos os 30 da TopBar
 Sidebar.Position = UDim2.new(0, 0, 0, 30)
 Sidebar.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 Sidebar.BorderSizePixel = 0
+Sidebar.ClipsDescendants = true -- Impede que as abas "vasem" pra fora da Sidebar
+
 local SidebarCorner = Instance.new("UICorner", Sidebar)
 SidebarCorner.CornerRadius = UDim.new(0, 8)
+
+-- Hiders pra manter o canto inferior esquerdo redondo, mas esconder o redondo de cima pra encostar na TopBar
 local SidebarHiderTop = Instance.new("Frame", Sidebar)
 SidebarHiderTop.Size = UDim2.new(1, 0, 0, 8)
-SidebarHiderTop.Position = UDim2.new(0,0,0,0)
+SidebarHiderTop.Position = UDim2.new(0, 0, 0, 0)
 SidebarHiderTop.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 SidebarHiderTop.BorderSizePixel = 0
+
 local SidebarHiderRight = Instance.new("Frame", Sidebar)
 SidebarHiderRight.Size = UDim2.new(0, 8, 1, 0)
 SidebarHiderRight.Position = UDim2.new(1, -8, 0, 0)
@@ -199,11 +204,24 @@ local function CreateTab(name)
 end
 
 local PlayerTab = CreateTab("Jogador")
+local FarmTab = CreateTab("Farm/Loja")
 local MiscTab = CreateTab("Outros")
 
 -- Deixar a primeira aba ativa
 Tabs["Jogador"].Content.Visible = true
 Tabs["Jogador"].Button.TextColor3 = Color3.fromRGB(255, 255, 255)
+
+---------------------------------------------------------------------
+-- CONTEÚDO PLACEHOLDER ABA "OUTROS"
+---------------------------------------------------------------------
+local MiscLabel = Instance.new("TextLabel", MiscTab)
+MiscLabel.Size = UDim2.new(1, 0, 0, 30)
+MiscLabel.BackgroundTransparency = 1
+MiscLabel.Text = "Mais extras serão adicionados aqui..."
+MiscLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+MiscLabel.Font = Enum.Font.Gotham
+MiscLabel.TextSize = 14
+MiscLabel.TextXAlignment = Enum.TextXAlignment.Center
 
 ---------------------------------------------------------------------
 -- FUNÇÕES: BARRA DE VELOCIDADE (SLIDER) E TOGGLE
@@ -379,6 +397,127 @@ table.insert(connections, RunService.RenderStepped:Connect(function()
 				end
 			end)
 		end
+	end
+end))
+
+---------------------------------------------------------------------
+-- FUNÇÕES: DROPDOWN
+---------------------------------------------------------------------
+local function CreateDropdown(parent, title, options, callback)
+	local Frame = Instance.new("Frame", parent)
+	Frame.Size = UDim2.new(1, 0, 0, 40) 
+	Frame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+	Frame.ZIndex = 1
+	local Corner = Instance.new("UICorner", Frame)
+	Corner.CornerRadius = UDim.new(0, 6)
+
+	local Btn = Instance.new("TextButton", Frame)
+	Btn.Size = UDim2.new(1, 0, 1, 0)
+	Btn.BackgroundTransparency = 1
+	Btn.Text = title .. " [Selecionar]"
+	Btn.TextColor3 = Color3.fromRGB(200, 200, 200)
+	Btn.Font = Enum.Font.GothamSemibold
+	Btn.TextSize = 13
+	Btn.TextXAlignment = Enum.TextXAlignment.Left
+	Btn.ZIndex = 2
+	
+	local UIPad = Instance.new("UIPadding", Btn)
+	UIPad.PaddingLeft = UDim.new(0, 10)
+
+	local DropList = Instance.new("ScrollingFrame", parent) -- Colocado no parent pra sobrepor
+	DropList.Size = UDim2.new(1, 0, 0, 120)
+	DropList.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+	DropList.ScrollBarThickness = 2
+	DropList.Visible = false
+	DropList.ZIndex = 5
+	local DropCorner = Instance.new("UICorner", DropList)
+	DropCorner.CornerRadius = UDim.new(0, 6)
+	
+	local ListLayout = Instance.new("UIListLayout", DropList)
+	ListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+
+	local isOpen = false
+	table.insert(connections, Btn.MouseButton1Click:Connect(function()
+		isOpen = not isOpen
+		if isOpen then
+			-- Posiciona a droplist exatamente debaixo do botão
+			DropList.Position = UDim2.new(
+				Frame.Position.X.Scale, Frame.Position.X.Offset,
+				Frame.Position.Y.Scale, Frame.Position.Y.Offset + 45
+			)
+			DropList.Visible = true
+		else
+			DropList.Visible = false
+		end
+	end))
+
+	local function AddOption(optName)
+		local OptBtn = Instance.new("TextButton", DropList)
+		OptBtn.Size = UDim2.new(1, 0, 0, 25)
+		OptBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 55)
+		OptBtn.Text = optName
+		OptBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		OptBtn.Font = Enum.Font.Gotham
+		OptBtn.TextSize = 12
+		OptBtn.ZIndex = 6
+
+		table.insert(connections, OptBtn.MouseButton1Click:Connect(function()
+			Btn.Text = title .. " [" .. optName .. "]"
+			isOpen = false
+			DropList.Visible = false
+			callback(optName)
+		end))
+	end
+
+	for _, opt in ipairs(options) do AddOption(opt) end
+end
+
+---------------------------------------------------------------------
+-- ABA FARM/LOJA (Auto Buy Brainrots)
+---------------------------------------------------------------------
+
+-- Para o Dropdown, nós poderíamos varrer ReplicatedStorage.Brainrots se quiséssemos dinâmico,
+-- mas como o exploit tá sendo feito base, vamos simular ou varrer (se o exploit suportar rs)
+local brainrotList = {}
+pcall(function()
+	local repStore = game:GetService("ReplicatedStorage")
+	if repStore:FindFirstChild("Brainrots") then
+		for _, item in ipairs(repStore.Brainrots:GetChildren()) do
+			table.insert(brainrotList, item.Name)
+		end
+	end
+end)
+if #brainrotList == 0 then brainrotList = {"Item 1", "Item 2", "Item 3"} end -- Fallback se a pasta n carregar logo de cara
+
+local selectedItemToBuy = nil
+CreateDropdown(FarmTab, "Item (Brainrot)", brainrotList, function(selected)
+    selectedItemToBuy = selected
+end)
+
+local autoBuyActive = false
+CreateToggle(FarmTab, "Auto Comprar Brainrot", function(state)
+	autoBuyActive = state
+end)
+
+-- Loop de Compra (Ajuste o caminho do Remote, baseado no Bridge)
+table.insert(connections, RunService.RenderStepped:Connect(function() -- Pode ser alterado para task.spawn + wait se travar o jogo
+	if autoBuyActive and selectedItemToBuy then
+		pcall(function()
+			local remotes = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
+			if remotes then
+				local bridge = remotes:FindFirstChild("Bridge")
+				if bridge then
+					if bridge:IsA("RemoteEvent") then
+						-- Alguns remotes genéricos como "Bridge" ou "Network" pedem a AÇÃO como primeiro argumento
+						-- Exemplo: Bridge:FireServer("Buy", selectedItemToBuy)
+						-- Vamos disparar o item direto para testar:
+						bridge:FireServer(selectedItemToBuy)
+					elseif bridge:IsA("RemoteFunction") then
+						bridge:InvokeServer(selectedItemToBuy)
+					end
+				end
+			end
+		end)
 	end
 end))
 
