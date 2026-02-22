@@ -106,7 +106,12 @@ Title.Parent = TopBar
 Title.Size = UDim2.new(1, -40, 1, 0)
 Title.Position = UDim2.new(0, 10, 0, 0)
 Title.BackgroundTransparency = 1
-Title.Text = "Sync Hub [v3]"
+local Title = Instance.new("TextLabel")
+Title.Parent = TopBar
+Title.Size = UDim2.new(1, -40, 1, 0)
+Title.Position = UDim2.new(0, 10, 0, 0)
+Title.BackgroundTransparency = 1
+Title.Text = "Sync Hub [v4]"
 Title.TextColor3 = Color3.fromRGB(220, 220, 220)
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 14
@@ -530,96 +535,40 @@ local function Notify(title, text)
 	end)
 end
 
--- Loop de Auto Farm (Fly Absoluto Anchored + Lerp/Tween)
--- O modo definitivo para forçar voo em anticheats: "Ancorar" (congelar) o osso do boneco e deslocar a estátua pelo ar.
-local flying = false
+-- Função auxiliar para notificar na tela do Roblox
+local function Notify(title, text)
+	pcall(function()
+		game.StarterGui:SetCore("SendNotification", {
+			Title = title,
+			Text = text,
+			Duration = 3
+		})
+	end)
+end
+
+-- Loop de Auto Farm (Via Remote "Bridge")
+-- Como "Item não encontrado no Mapa" provou que o item NÃO É um objeto físico no chão, vamos voltar a bombardear o Remote!
+local purchaseDelay = 0.5 -- Tempo entre cada tentativa de compra (para não tomar kick de spam)
 task.spawn(function()
-	while task.wait(0.5) do
-		if autoBuyActive and selectedItemToBuy and not flying then
+	while task.wait(purchaseDelay) do
+		if autoBuyActive and selectedItemToBuy then
 			pcall(function()
-				local character = LocalPlayer.Character
-				if character and character:FindFirstChild("HumanoidRootPart") and character:FindFirstChild("Humanoid") then
-					
-					local rootPart = character.HumanoidRootPart
-					
-					-- Procura o item de forma GLOBAL no Workspace
-					local targetItem = nil
-					if workspace:FindFirstChild("Brainrots") and workspace.Brainrots:FindFirstChild(selectedItemToBuy) then
-						targetItem = workspace.Brainrots:FindFirstChild(selectedItemToBuy)
-					else
-						for _, v in ipairs(workspace:GetDescendants()) do
-							if v.Name == selectedItemToBuy and (v:IsA("Model") or v:IsA("BasePart")) then
-								-- Verifica se tem ProximityPrompt ou ao menos um Touch
-								if v:FindFirstChildWhichIsA("ProximityPrompt", true) or v:IsA("Part") then
-									targetItem = v
-									break
-								end
-							end
-						end
-					end
-					
-					if targetItem then
-						local targetPart = targetItem:IsA("Model") and targetItem.PrimaryPart or targetItem:IsA("BasePart") and targetItem or targetItem:FindFirstChildWhichIsA("BasePart")
+				local remotes = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
+				
+				if remotes then
+					local bridge = remotes:FindFirstChild("Bridge")
+					if bridge and bridge:IsA("RemoteEvent") then
+						-- Usando a estrutura de argumentos que o Spy pegou
+						-- [1] = "Path", [2] = "Brainrots", [3] = "Purchase", [4] = NOME DO ITEM (que pegamos do ReplicatedStorage)
+						local args = {
+							[1] = "Path",
+							[2] = "Brainrots",
+							[3] = "Purchase",
+							[4] = selectedItemToBuy 
+						}
 						
-						if targetPart then
-							flying = true
-							
-							-- Força as mudanças para ignorar colisão e física externa
-							local oldAnchored = rootPart.Anchored
-							rootPart.Anchored = true
-							
-							local noclipConnection = RunService.Stepped:Connect(function()
-								for _, part in ipairs(character:GetDescendants()) do
-									if part:IsA("BasePart") then part.CanCollide = false end
-								end
-							end)
-							
-							-- Anima o voo manualmente (Lerp Anchored)
-							local speed = 2 -- Quanto maior, mais rápido o voo absoluto
-							while targetPart and targetPart.Parent and autoBuyActive do
-								local dist = (rootPart.Position - targetPart.Position).Magnitude
-								
-								if dist < 5 then
-									rootPart.CFrame = targetPart.CFrame
-									break
-								end
-								
-								local lookCFrame = CFrame.lookAt(rootPart.Position, targetPart.Position)
-								rootPart.CFrame = lookCFrame * CFrame.new(0, 0, -speed)
-								
-								task.wait()
-							end
-							
-							-- Restaura a física e Noclip
-							noclipConnection:Disconnect()
-							rootPart.Anchored = oldAnchored
-							rootPart.Velocity = Vector3.new(0,0,0)
-							
-							-- INTERAÇÃO
-							if targetItem and targetItem.Parent then
-								for _, prompt in ipairs(targetItem:GetDescendants()) do
-									if prompt:IsA("ProximityPrompt") then
-										fireproximityprompt(prompt, 1, true)
-									end
-								end
-								
-								if targetPart:FindFirstChildWhichIsA("TouchTransmitter") then
-									firetouchinterest(rootPart, targetPart, 0)
-									task.wait(0.1)
-									firetouchinterest(rootPart, targetPart, 1)
-								end
-							end
-							
-							task.wait(0.5)
-							flying = false
-						else
-							Notify("Sync Hub", "Parte física do item não achada!")
-							task.wait(3)
-						end
-					else
-						-- Avisa o usuário se o item estragou ou ainda não spawnou
-						Notify("Sync Hub", "Item não encontrado no Mapa!")
-						task.wait(3) -- Espera uns segundos antes de "spamar" aviso
+						-- Dispara a compra!
+						bridge:FireServer(unpack(args))
 					end
 				end
 			end)
