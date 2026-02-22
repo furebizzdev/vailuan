@@ -101,7 +101,7 @@ Title.Parent = TopBar
 Title.Size = UDim2.new(1, -40, 1, 0)
 Title.Position = UDim2.new(0, 10, 0, 0)
 Title.BackgroundTransparency = 1
-Title.Text = "Base Script GUI"
+Title.Text = "Sync Hub [v2]"
 Title.TextColor3 = Color3.fromRGB(220, 220, 220)
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 14
@@ -514,12 +514,12 @@ CreateToggle(FarmTab, "Auto Comprar Brainrot", function(state)
 	autoBuyActive = state
 end)
 
--- Loop de Auto Farm (Tween Teleport / Fly)
--- Usando TweenService pra "voar" maciamente até o item e burlar anticheats que barram CFrame direto
-local tweening = false
+-- Loop de Auto Farm (Pseudo-Fly Manual Lerp)
+-- Usando movimentação manual CFrame contínua pra forçar a ida (passa por cima de anticheats que barram body movers)
+local flying = false
 task.spawn(function()
-	while task.wait(0.1) do
-		if autoBuyActive and selectedItemToBuy and not tweening then
+	while task.wait() do
+		if autoBuyActive and selectedItemToBuy and not flying then
 			pcall(function()
 				local character = LocalPlayer.Character
 				if character and character:FindFirstChild("HumanoidRootPart") and character:FindFirstChild("Humanoid") then
@@ -545,22 +545,9 @@ task.spawn(function()
 						local targetPart = targetItem:IsA("Model") and targetItem.PrimaryPart or targetItem:IsA("BasePart") and targetItem or targetItem:FindFirstChildWhichIsA("BasePart")
 						
 						if targetPart then
-							tweening = true
+							flying = true
 							
-							-- Desliga a gravidade temporariamente (opcional, mas ajuda no fly)
-							local bg = Instance.new("BodyPosition", rootPart)
-							bg.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-							bg.Position = rootPart.Position
-							
-							-- Calcula a distância para achar a duração perfeita do Voo (Tween)
-							-- Velocidade ajustável (dividendo). Ex: 50 blocks/sec
-							local dist = (rootPart.Position - targetPart.Position).Magnitude
-							local tweenSpeed = math.clamp(dist / 60, 0.5, 15) -- Garante um tempo razoável
-							
-							local tweenInfo = TweenInfo.new(tweenSpeed, Enum.EasingStyle.Linear)
-							local tween = TweenService:Create(rootPart, tweenInfo, {CFrame = targetPart.CFrame})
-							
-							-- Ativa Noclip durante o voo
+							-- Desativa noclip dinâmico para não travar nas paredes
 							local noclipConnection
 							noclipConnection = RunService.Stepped:Connect(function()
 								for _, part in ipairs(character:GetDescendants()) do
@@ -568,31 +555,48 @@ task.spawn(function()
 										part.CanCollide = false
 									end
 								end
+								-- Congela a física para o Humanoid não puxar pra baixo
+								rootPart.Velocity = Vector3.new(0,0,0)
 							end)
 							
-							tween:Play()
-							tween.Completed:Wait() -- Espera o boneco chegar fisicamente lá
+							-- Voa manualmente CFrame por CFrame até o alvo
+							local speed = 3.5 -- Velocidade que ele avança a cada pulso
+							while targetPart and targetPart.Parent and autoBuyActive do
+								local dist = (rootPart.Position - targetPart.Position).Magnitude
+								
+								-- Se já chegou ou tá muito perto, encerra o voo
+								if dist < 4 then
+									rootPart.CFrame = targetPart.CFrame
+									break
+								end
+								
+								-- Aponta para o alvo e anda um pouco para frente
+								local lookCFrame = CFrame.lookAt(rootPart.Position, targetPart.Position)
+								rootPart.CFrame = lookCFrame * CFrame.new(0, 0, -speed)
+								
+								task.wait()
+							end
 							
 							noclipConnection:Disconnect()
-							bg:Destroy()
 							rootPart.Velocity = Vector3.new(0,0,0)
 							
-							-- TENTA INTERAGIR UMA VEZ QUE CHEGOU
-							for _, prompt in ipairs(targetItem:GetDescendants()) do
-								if prompt:IsA("ProximityPrompt") then
-									fireproximityprompt(prompt, 1, true)
+							-- TENTA INTERAGIR UMA VEZ QUE CHEGOU NO ALVO
+							if targetItem and targetItem.Parent then
+								for _, prompt in ipairs(targetItem:GetDescendants()) do
+									if prompt:IsA("ProximityPrompt") then
+										fireproximityprompt(prompt, 1, true)
+									end
+								end
+								
+								if targetPart:FindFirstChildWhichIsA("TouchTransmitter") then
+									firetouchinterest(rootPart, targetPart, 0)
+									task.wait(0.1)
+									firetouchinterest(rootPart, targetPart, 1)
 								end
 							end
 							
-							if targetPart:FindFirstChildWhichIsA("TouchTransmitter") then
-								firetouchinterest(rootPart, targetPart, 0)
-								task.wait(0.1)
-								firetouchinterest(rootPart, targetPart, 1)
-							end
-							
-							-- Pequeno delay antes do próximo voo/loop
 							task.wait(0.5)
-							tweening = false
+							flying = false
 						end
 					end
 				end
