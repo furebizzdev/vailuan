@@ -481,19 +481,21 @@ end
 -- ABA FARM/LOJA (Auto Buy Brainrots)
 ---------------------------------------------------------------------
 
--- Para o Dropdown, nós varremos ReplicatedStorage.Brainrots pra pegar o Nome de CADA UM 
--- Observação pelo seu log (Argumento 4): Parece que os itens pedem o NOME ou o ID deles. 
--- Vamos usar o Nome do item como selecionado, que geralmente é o nome da Pasta/Instância.
+-- Para o Dropdown, desta vez vamos varrer o mapa (Workspace) atrás da fisicalidade dos itens,
+-- pois usaremos CFrame para evitar a criptografia dos nomes/IDs.
 local brainrotList = {}
+local brainrotsModels = workspace:FindFirstChild("Brainrots") or workspace:FindFirstChild("Map") or workspace -- Ajuste a pasta se souber onde eles spawnar, coloquei como generalista
 pcall(function()
-	local repStore = game:GetService("ReplicatedStorage")
-	if repStore:FindFirstChild("Brainrots") then
-		for _, item in ipairs(repStore.Brainrots:GetChildren()) do
-			table.insert(brainrotList, item.Name)
+	-- Procura coisas parecidas com o que foi loggado ou tenta achar ProximityPrompts
+	if workspace:FindFirstChild("Brainrots") then
+		for _, item in ipairs(workspace.Brainrots:GetChildren()) do
+			if item:IsA("Model") or item:IsA("Part") then
+				table.insert(brainrotList, item.Name)
+			end
 		end
 	end
 end)
-if #brainrotList == 0 then brainrotList = {"ItemNaoCarregado"} end -- Fallback
+if #brainrotList == 0 then brainrotList = {"Aguardando Itens do Mapa"} end -- Fallback
 
 local selectedItemToBuy = nil
 CreateDropdown(FarmTab, "Item (Brainrot)", brainrotList, function(selected)
@@ -505,24 +507,37 @@ CreateToggle(FarmTab, "Auto Comprar Brainrot", function(state)
 	autoBuyActive = state
 end)
 
--- Loop de Compra (Ajuste o caminho do Remote, baseado no Bridge)
+-- Loop de Auto Farm (CFrame Teleport)
 table.insert(connections, RunService.RenderStepped:Connect(function() 
 	if autoBuyActive and selectedItemToBuy then
 		pcall(function()
-			local remotes = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
-			if remotes then
-				local bridge = remotes:FindFirstChild("Bridge")
-				if bridge then
-					if bridge:IsA("RemoteEvent") then
-						-- Usando os Argumentos exatos capturados pelo Spy:
-                        -- [1] = "Path", [2] = "Brainrots", [3] = "Purchase", [4] = Item/UUID
-						local args = {
-							[1] = "Path",
-							[2] = "Brainrots",
-							[3] = "Purchase",
-							[4] = selectedItemToBuy -- O nome/id vindo do Dropdown
-						}
-						bridge:FireServer(unpack(args))
+			local character = LocalPlayer.Character
+			if character and character:FindFirstChild("HumanoidRootPart") then
+				
+				-- Procura o item no Workspace
+				-- Geralmente os jogos guardam em uma pasta no workspace, tentei "Brainrots" ou o Workspace inteiro
+				local targetItem = nil
+				if workspace:FindFirstChild("Brainrots") then
+					targetItem = workspace.Brainrots:FindFirstChild(selectedItemToBuy)
+				end
+				
+				if targetItem then
+					-- Encontra a parte principal do item (Part ou PrimaryPart de um Model)
+					local targetPart = targetItem:IsA("Model") and targetItem.PrimaryPart or targetItem:IsA("BasePart") and targetItem or targetItem:FindFirstChildWhichIsA("BasePart")
+					
+					if targetPart then
+						-- Teleporta o jogador até o item
+						character.HumanoidRootPart.CFrame = targetPart.CFrame * CFrame.new(0, 0, 0)
+						
+						-- Força a velocidade a zerar pro boneco não sair voando com física bugada no tp
+						character.HumanoidRootPart.Velocity = Vector3.new(0,0,0)
+
+						-- Tenta Ativar todos os ProximityPrompts perto pra "comprar/pegar" automaticamente
+						for _, prompt in ipairs(targetItem:GetDescendants()) do
+							if prompt:IsA("ProximityPrompt") then
+								fireproximityprompt(prompt, 1, true)
+							end
+						end
 					end
 				end
 			end
