@@ -514,21 +514,23 @@ CreateToggle(FarmTab, "Auto Comprar Brainrot", function(state)
 	autoBuyActive = state
 end)
 
--- Loop de Auto Farm (CFrame Teleport Asíncrono)
--- Movido de RenderStepped para task.spawn + while wait para não bugar a física do Humanoid e seguir o item fluidamente
+-- Loop de Auto Farm (Tween Teleport / Fly)
+-- Usando TweenService pra "voar" maciamente até o item e burlar anticheats que barram CFrame direto
+local tweening = false
 task.spawn(function()
 	while task.wait(0.1) do
-		if autoBuyActive and selectedItemToBuy then
+		if autoBuyActive and selectedItemToBuy and not tweening then
 			pcall(function()
 				local character = LocalPlayer.Character
-				if character and character:FindFirstChild("HumanoidRootPart") then
+				if character and character:FindFirstChild("HumanoidRootPart") and character:FindFirstChild("Humanoid") then
 					
-					-- Procura o item de forma GLOBAL no Workspace (seja na pasta Brainrots ou Map)
+					local rootPart = character.HumanoidRootPart
+					
+					-- Procura o item de forma GLOBAL no Workspace
 					local targetItem = nil
 					if workspace:FindFirstChild("Brainrots") and workspace.Brainrots:FindFirstChild(selectedItemToBuy) then
 						targetItem = workspace.Brainrots:FindFirstChild(selectedItemToBuy)
 					else
-						-- Procura de forma agressiva ignorando pasta
 						for _, v in ipairs(workspace:GetDescendants()) do
 							if v.Name == selectedItemToBuy and (v:IsA("Model") or v:IsA("BasePart")) then
 								if v:FindFirstChildWhichIsA("ProximityPrompt", true) or v:IsA("Part") then
@@ -540,29 +542,57 @@ task.spawn(function()
 					end
 					
 					if targetItem then
-						-- Encontra a parte principal do item (Part ou PrimaryPart de um Model)
 						local targetPart = targetItem:IsA("Model") and targetItem.PrimaryPart or targetItem:IsA("BasePart") and targetItem or targetItem:FindFirstChildWhichIsA("BasePart")
 						
 						if targetPart then
-							-- Teleporta o jogador até o item
-							character.HumanoidRootPart.CFrame = targetPart.CFrame
+							tweening = true
 							
-							-- Força a velocidade a zerar pro boneco não sair voando com física bugada no tp
-							character.HumanoidRootPart.Velocity = Vector3.new(0,0,0)
-
-							-- Tenta Ativar todos os ProximityPrompts perto pra "comprar/pegar" automaticamente
+							-- Desliga a gravidade temporariamente (opcional, mas ajuda no fly)
+							local bg = Instance.new("BodyPosition", rootPart)
+							bg.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+							bg.Position = rootPart.Position
+							
+							-- Calcula a distância para achar a duração perfeita do Voo (Tween)
+							-- Velocidade ajustável (dividendo). Ex: 50 blocks/sec
+							local dist = (rootPart.Position - targetPart.Position).Magnitude
+							local tweenSpeed = math.clamp(dist / 60, 0.5, 15) -- Garante um tempo razoável
+							
+							local tweenInfo = TweenInfo.new(tweenSpeed, Enum.EasingStyle.Linear)
+							local tween = TweenService:Create(rootPart, tweenInfo, {CFrame = targetPart.CFrame})
+							
+							-- Ativa Noclip durante o voo
+							local noclipConnection
+							noclipConnection = RunService.Stepped:Connect(function()
+								for _, part in ipairs(character:GetDescendants()) do
+									if part:IsA("BasePart") then
+										part.CanCollide = false
+									end
+								end
+							end)
+							
+							tween:Play()
+							tween.Completed:Wait() -- Espera o boneco chegar fisicamente lá
+							
+							noclipConnection:Disconnect()
+							bg:Destroy()
+							rootPart.Velocity = Vector3.new(0,0,0)
+							
+							-- TENTA INTERAGIR UMA VEZ QUE CHEGOU
 							for _, prompt in ipairs(targetItem:GetDescendants()) do
 								if prompt:IsA("ProximityPrompt") then
 									fireproximityprompt(prompt, 1, true)
 								end
 							end
 							
-							-- Interage encostando forçadamente (Fake Touch)
 							if targetPart:FindFirstChildWhichIsA("TouchTransmitter") then
-								firetouchinterest(character.HumanoidRootPart, targetPart, 0)
-								task.wait()
-								firetouchinterest(character.HumanoidRootPart, targetPart, 1)
+								firetouchinterest(rootPart, targetPart, 0)
+								task.wait(0.1)
+								firetouchinterest(rootPart, targetPart, 1)
 							end
+							
+							-- Pequeno delay antes do próximo voo/loop
+							task.wait(0.5)
+							tweening = false
 						end
 					end
 				end
