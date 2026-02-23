@@ -101,7 +101,7 @@ Title.Parent = TopBar
 Title.Size = UDim2.new(1, -40, 1, 0)
 Title.Position = UDim2.new(0, 10, 0, 0)
 Title.BackgroundTransparency = 1
-Title.Text = "Sync Hub [v11]"
+Title.Text = "Sync Hub [v12]"
 Title.TextColor3 = Color3.fromRGB(220, 220, 220)
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 14
@@ -492,16 +492,6 @@ local function CreateDropdown(parent, title, options, callback)
 	for _, opt in ipairs(options) do AddOption(opt) end
 end
 
--- Abas
-local PlayerTab = CreateTab("Jogador")
-local VulnTab = CreateTab("Vulnerabilidades")
-local FarmTab = CreateTab("Farm/Loja")
-local MiscTab = CreateTab("Outros")
-
--- Garante que a primeira aba esteja visível ao iniciar
-Tabs["Jogador"].Content.Visible = true
-Tabs["Jogador"].Button.TextColor3 = Color3.fromRGB(255, 255, 255)
-
 ---------------------------------------------------------------------
 -- ABA VULNERABILIDADES (Dinheiro e Exploits Universais)
 ---------------------------------------------------------------------
@@ -521,20 +511,8 @@ CreateToggle(VulnTab, "Noclip (Fantasma)", function(state)
 end)
 
 local batAuraActive = false
-CreateToggle(VulnTab, "Bat Aura (Hitbox no Player + Max Speed)", function(state)
+CreateToggle(VulnTab, "Bat Aura (Kill Aura + Rapid)", function(state)
 	batAuraActive = state
-	
-	-- Se o cara desligar, tenta restaurar o tamanho do player usando a Humanoid original
-	if not state then
-		pcall(function()
-			local character = LocalPlayer.Character
-			if character and character:FindFirstChild("HumanoidRootPart") then
-				-- O tamanho padrão do RootPart é perto de 2x2x1, mas evitamos bugar resetando o CFrame limpo
-				character.HumanoidRootPart.Size = Vector3.new(2, 2, 1)
-				character.HumanoidRootPart.Transparency = 1
-			end
-		end)
-	end
 end)
 
 -- Loop Auto Dinheiro: Tenta explorar remotes que dão grana se o dev não proteger
@@ -594,34 +572,36 @@ table.insert(connections, RunService.Stepped:Connect(function()
 	end
 end))
 
--- Loop do Bat Aura (Anexado ao Corpo com Hitbox Gigante e Speed Máximo por Frame)
+-- Loop do Bat Aura (Kill Aura Virtual + Rapid Click)
 table.insert(connections, RunService.RenderStepped:Connect(function()
 	if batAuraActive then
 		pcall(function()
 			local character = LocalPlayer.Character
 			if character and character:FindFirstChild("HumanoidRootPart") then
-				
-				-- Aumenta a Hitbox do PLAYER (Boneco vira uma bola de dano gigante)
 				local rootPart = character.HumanoidRootPart
-				rootPart.Size = Vector3.new(35, 35, 35)
-				rootPart.CanCollide = false 
-				rootPart.Transparency = 0.8 -- Fica quase invisível pra ver onde tá
-				
 				local tool = character:FindFirstChildWhichIsA("Tool")
+				
 				if tool then
 					local handle = tool:FindFirstChild("Handle")
 					
-					-- Simula Cliques loucamente todo FPS (~60 clicks por seg)
+					-- Rapid Fire: Dispara o click da arma todo frame
 					tool:Activate()
 					
-					-- Bate forçado nos inimigos dentro da bolha de dano do seu Player
-					if handle and handle:FindFirstChildWhichIsA("TouchTransmitter") then
-						for _, enemyChar in ipairs(workspace:GetChildren()) do
-							if enemyChar ~= character and enemyChar:FindFirstChild("Humanoid") and enemyChar:FindFirstChild("HumanoidRootPart") then
-								local dist = (rootPart.Position - enemyChar.HumanoidRootPart.Position).Magnitude
-								if dist <= 38 then
-									firetouchinterest(handle, enemyChar.HumanoidRootPart, 0)
-									firetouchinterest(handle, enemyChar.HumanoidRootPart, 1)
+					-- Também tenta clicar via VirtualInputManager para furar o debounce
+					pcall(function()
+						local vim = game:GetService("VirtualInputManager")
+						vim:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+						vim:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+					end)
+					
+					-- Kill Aura: Bate em TODOS os inimigos num raio de 40 blocos usando fake touch
+					if handle then
+						for _, obj in ipairs(workspace:GetChildren()) do
+							if obj ~= character and obj:FindFirstChild("Humanoid") and obj:FindFirstChild("HumanoidRootPart") then
+								local dist = (rootPart.Position - obj.HumanoidRootPart.Position).Magnitude
+								if dist <= 40 then
+									firetouchinterest(handle, obj.HumanoidRootPart, 0)
+									firetouchinterest(handle, obj.HumanoidRootPart, 1)
 								end
 							end
 						end
