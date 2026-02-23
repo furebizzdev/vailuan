@@ -101,7 +101,7 @@ Title.Parent = TopBar
 Title.Size = UDim2.new(1, -40, 1, 0)
 Title.Position = UDim2.new(0, 10, 0, 0)
 Title.BackgroundTransparency = 1
-Title.Text = "Sync Hub [v12]"
+Title.Text = "Sync Hub [v13]"
 Title.TextColor3 = Color3.fromRGB(220, 220, 220)
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 14
@@ -572,7 +572,7 @@ table.insert(connections, RunService.Stepped:Connect(function()
 	end
 end))
 
--- Loop do Bat Aura (Kill Aura Virtual + Rapid Click)
+-- Loop do Bat Aura (Kill Aura + Rapid Click sem VIM)
 table.insert(connections, RunService.RenderStepped:Connect(function()
 	if batAuraActive then
 		pcall(function()
@@ -581,17 +581,32 @@ table.insert(connections, RunService.RenderStepped:Connect(function()
 				local rootPart = character.HumanoidRootPart
 				local tool = character:FindFirstChildWhichIsA("Tool")
 				
+				if not tool then
+					-- Se não tiver arma na mão, tenta equipar a primeira da mochila
+					local backpack = LocalPlayer:FindFirstChild("Backpack")
+					if backpack then
+						local weapon = backpack:FindFirstChildWhichIsA("Tool")
+						if weapon then
+							character.Humanoid:EquipTool(weapon)
+						end
+					end
+				end
+				
+				tool = character:FindFirstChildWhichIsA("Tool")
 				if tool then
 					local handle = tool:FindFirstChild("Handle")
 					
-					-- Rapid Fire: Dispara o click da arma todo frame
+					-- Rapidinha: Ativa, desequipa e reequipa pra zerar o cooldown interno da Tool
 					tool:Activate()
-					
-					-- Também tenta clicar via VirtualInputManager para furar o debounce
-					pcall(function()
-						local vim = game:GetService("VirtualInputManager")
-						vim:SendMouseButtonEvent(0, 0, 0, true, game, 0)
-						vim:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+					task.defer(function()
+						pcall(function()
+							local humanoid = character:FindFirstChild("Humanoid")
+							if humanoid and tool.Parent == character then
+								humanoid:UnequipTools()
+								task.wait()
+								humanoid:EquipTool(tool)
+							end
+						end)
 					end)
 					
 					-- Kill Aura: Bate em TODOS os inimigos num raio de 40 blocos usando fake touch
