@@ -101,7 +101,7 @@ Title.Parent = TopBar
 Title.Size = UDim2.new(1, -40, 1, 0)
 Title.Position = UDim2.new(0, 10, 0, 0)
 Title.BackgroundTransparency = 1
-Title.Text = "Sync Hub [v13]"
+Title.Text = "Sync Hub [v14]"
 Title.TextColor3 = Color3.fromRGB(220, 220, 220)
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 14
@@ -676,6 +676,11 @@ CreateToggle(FarmTab, "Auto Comprar Brainrot", function(state)
 	autoBuyActive = state
 end)
 
+local autoCollectActive = false
+CreateToggle(FarmTab, "Auto Coletar Brainrot (Slots)", function(state)
+	autoCollectActive = state
+end)
+
 -- Função auxiliar para notificar na tela do Roblox
 local function Notify(title, text)
 	pcall(function()
@@ -687,33 +692,31 @@ local function Notify(title, text)
 	end)
 end
 
-
--- Loop de Auto Farm (VIA REMOTE DEFINITIVO: Sync Hub [v6])
-local purchaseDelay = 0.5 
+-- Loop de Auto Farm (Compra + Coleta via Remote Bridge)
 task.spawn(function()
-	while task.wait(purchaseDelay) do
-		if autoBuyActive and selectedItemToBuy then
-			pcall(function()
-				local remotes = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
+	while task.wait(0.5) do
+		pcall(function()
+			local bridge = game:GetService("ReplicatedStorage"):WaitForChild("Remotes", 5):WaitForChild("Bridge", 5)
+			if not bridge then return end
+			
+			-- AUTO COMPRAR
+			if autoBuyActive and selectedItemToBuy then
+				local realUUID = brainrotMapping[selectedItemToBuy] or selectedItemToBuy
 				
-				if remotes then
-					local bridge = remotes:FindFirstChild("Bridge")
-					if bridge and bridge:IsA("RemoteEvent") then
-						-- Captura o ID Criptografado real com base no selecionado da lista do Dropdown
-						local realUUID = brainrotMapping[selectedItemToBuy] or selectedItemToBuy
-						
-						local args = {
-							[1] = "Path",
-							[2] = "Brainrots",
-							[3] = "Purchase",
-							[4] = realUUID -- Manda EXATAMENTE o que o Spy registrou
-						}
-						
-						bridge:FireServer(unpack(args))
-					end
+				-- Dispara exatamente como o Spy pegou:
+				-- [1] = "Path", [2] = "Brainrots", [3] = "Purchase", [4] = UUID
+				bridge:FireServer("Path", "Brainrots", "Purchase", realUUID)
+			end
+			
+			-- AUTO COLETAR (Slots 1 até 6)
+			if autoCollectActive then
+				for i = 1, 6 do
+					-- [1] = "General", [2] = "Brainrots", [3] = "Collect", [4] = "SlotN"
+					bridge:FireServer("General", "Brainrots", "Collect", "Slot" .. i)
+					task.wait(0.1)
 				end
-			end)
-		end
+			end
+		end)
 	end
 end)
 
