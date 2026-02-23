@@ -101,17 +101,7 @@ Title.Parent = TopBar
 Title.Size = UDim2.new(1, -40, 1, 0)
 Title.Position = UDim2.new(0, 10, 0, 0)
 Title.BackgroundTransparency = 1
-local Title = Instance.new("TextLabel")
-Title.Parent = TopBar
-Title.Size = UDim2.new(1, -40, 1, 0)
-Title.Position = UDim2.new(0, 10, 0, 0)
-Title.BackgroundTransparency = 1
-local Title = Instance.new("TextLabel")
-Title.Parent = TopBar
-Title.Size = UDim2.new(1, -40, 1, 0)
-Title.Position = UDim2.new(0, 10, 0, 0)
-Title.BackgroundTransparency = 1
-Title.Text = "Sync Hub [v10]"
+Title.Text = "Sync Hub [v11]"
 Title.TextColor3 = Color3.fromRGB(220, 220, 220)
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 14
@@ -204,6 +194,11 @@ local function CreateTab(name)
 	local ContentList = Instance.new("UIListLayout", TabContent)
 	ContentList.SortOrder = Enum.SortOrder.LayoutOrder
 	ContentList.Padding = UDim.new(0, 10)
+	
+	ContentList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+		TabContent.CanvasSize = UDim2.new(0, 0, 0, ContentList.AbsoluteContentSize.Y + 20)
+	end)
+	
 	local Padding = Instance.new("UIPadding", TabContent)
 	Padding.PaddingTop = UDim.new(0, 10)
 	Padding.PaddingLeft = UDim.new(0, 10)
@@ -526,20 +521,17 @@ CreateToggle(VulnTab, "Noclip (Fantasma)", function(state)
 end)
 
 local batAuraActive = false
-CreateToggle(VulnTab, "Bat Aura (Max Hitbox + Rapid Fire)", function(state)
+CreateToggle(VulnTab, "Bat Aura (Hitbox no Player + Max Speed)", function(state)
 	batAuraActive = state
 	
-	-- Se o cara desligar, tenta restaurar o tamanho do taco (aproximado)
+	-- Se o cara desligar, tenta restaurar o tamanho do player usando a Humanoid original
 	if not state then
 		pcall(function()
 			local character = LocalPlayer.Character
-			if character then
-				local tool = character:FindFirstChildWhichIsA("Tool")
-				if tool and tool:FindFirstChild("Handle") then
-					tool.Handle.Size = Vector3.new(1, 4, 1) -- Tamanho normal aproximado de um bastão
-					tool.Handle.Massless = false
-					tool.Handle.Transparency = 0
-				end
+			if character and character:FindFirstChild("HumanoidRootPart") then
+				-- O tamanho padrão do RootPart é perto de 2x2x1, mas evitamos bugar resetando o CFrame limpo
+				character.HumanoidRootPart.Size = Vector3.new(2, 2, 1)
+				character.HumanoidRootPart.Transparency = 1
 			end
 		end)
 	end
@@ -602,54 +594,43 @@ table.insert(connections, RunService.Stepped:Connect(function()
 	end
 end))
 
--- Loop do Bat Aura (Kill Aura com Taco e Hitbox enorme)
-task.spawn(function()
-	while task.wait(0.05) do -- Speed muito rápido pra bater (20 clicks por segundo)
-		if batAuraActive then
-			pcall(function()
-				local character = LocalPlayer.Character
-				if character then
-					-- Pega a ferramenta (taco/espada) que o personagem está segurando no momento
-					local tool = character:FindFirstChildWhichIsA("Tool")
-					if tool then
-						-- Aumenta a Hitbox absurdamente
-						local handle = tool:FindFirstChild("Handle")
-						if handle and handle:IsA("BasePart") then
-							handle.Size = Vector3.new(30, 30, 30) -- Caixona gigante
-							handle.CanCollide = false -- Pra não bugar a física e jogar o personagem longe
-							handle.Massless = true -- Impede a gravidade do bastão gigante afetar o voo
-							handle.Transparency = 0.8 -- Deixa quase invisível pra não cegar o user
-							
-							-- Muitos Tacos de baseball e facas usam Meshes importados do Studio.
-							-- Os the SpecialMesh restringe visualmente, então ele bloqueia crescer a espada e ela parece inalterada!
-							local mesh = handle:FindFirstChildWhichIsA("DataModelMesh", true) or handle:FindFirstChildWhichIsA("SpecialMesh")
-							if mesh then
-								mesh.Scale = Vector3.new(30, 30, 30)
-							end
-							
-							-- Se for usando sistema de toque bruto nos inimigos, já ataca quem tiver dentro
-							for _, enemyChar in ipairs(workspace:GetChildren()) do
-								if enemyChar ~= character and enemyChar:FindFirstChild("Humanoid") and enemyChar:FindFirstChild("HumanoidRootPart") then
-									local distance = (character.HumanoidRootPart.Position - enemyChar.HumanoidRootPart.Position).Magnitude
-									if distance <= 35 then -- O alvo tá na range da Hitbox expandida?
-										-- Força toque no Handle contra eles dependendo do anticheat
-										if handle:FindFirstChildWhichIsA("TouchTransmitter") then
-											firetouchinterest(handle, enemyChar.HumanoidRootPart, 0)
-											firetouchinterest(handle, enemyChar.HumanoidRootPart, 1)
-										end
-									end
+-- Loop do Bat Aura (Anexado ao Corpo com Hitbox Gigante e Speed Máximo por Frame)
+table.insert(connections, RunService.RenderStepped:Connect(function()
+	if batAuraActive then
+		pcall(function()
+			local character = LocalPlayer.Character
+			if character and character:FindFirstChild("HumanoidRootPart") then
+				
+				-- Aumenta a Hitbox do PLAYER (Boneco vira uma bola de dano gigante)
+				local rootPart = character.HumanoidRootPart
+				rootPart.Size = Vector3.new(35, 35, 35)
+				rootPart.CanCollide = false 
+				rootPart.Transparency = 0.8 -- Fica quase invisível pra ver onde tá
+				
+				local tool = character:FindFirstChildWhichIsA("Tool")
+				if tool then
+					local handle = tool:FindFirstChild("Handle")
+					
+					-- Simula Cliques loucamente todo FPS (~60 clicks por seg)
+					tool:Activate()
+					
+					-- Bate forçado nos inimigos dentro da bolha de dano do seu Player
+					if handle and handle:FindFirstChildWhichIsA("TouchTransmitter") then
+						for _, enemyChar in ipairs(workspace:GetChildren()) do
+							if enemyChar ~= character and enemyChar:FindFirstChild("Humanoid") and enemyChar:FindFirstChild("HumanoidRootPart") then
+								local dist = (rootPart.Position - enemyChar.HumanoidRootPart.Position).Magnitude
+								if dist <= 38 then
+									firetouchinterest(handle, enemyChar.HumanoidRootPart, 0)
+									firetouchinterest(handle, enemyChar.HumanoidRootPart, 1)
 								end
 							end
 						end
-						
-						-- Simula Cliques loucamente (Attack Rápido)
-						tool:Activate()
 					end
 				end
-			end)
-		end
+			end
+		end)
 	end
-end)
+end))
 
 ---------------------------------------------------------------------
 -- ABA FARM/LOJA (Auto Buy Brainrots)
@@ -711,16 +692,6 @@ local function Notify(title, text)
 	end)
 end
 
--- Função auxiliar para notificar na tela do Roblox
-local function Notify(title, text)
-	pcall(function()
-		game.StarterGui:SetCore("SendNotification", {
-			Title = title,
-			Text = text,
-			Duration = 3
-		})
-	end)
-end
 
 -- Loop de Auto Farm (VIA REMOTE DEFINITIVO: Sync Hub [v6])
 local purchaseDelay = 0.5 
